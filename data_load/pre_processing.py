@@ -12,10 +12,18 @@ def jan_dec_diff(data):
     diff_data["off_peak_fix_jan_dec"]=diff_data["jan_fix"]-diff_data["price_off_peak_fix"]
     diff_data.drop(columns=["price_off_peak_var","price_off_peak_fix","jan_var","jan_fix","price_date_y","price_date_x"],inplace=True)
     return diff_data
-def cycles(data,col1,col2):
-    new_col="mean_"+col1+"_"+col2
+def cycles(data,col1,col2,desc="mean_by_month"):
+    new_col=desc+col1+"_"+col2
     data[new_col]=data[col1]-data[col2]
     return data
+
+def rare_samples_checking(data,col,min_samples=100):
+    value_count_dict=data[col].value_counts().to_dict()
+    cat_list=[]
+    for v, i in value_count_dict.items():
+        if i>=min_samples:
+            cat_list.append(v)
+    return cat_list
 
 
 def join_tables(df1,df2,merge_col):
@@ -36,13 +44,42 @@ def data_pre_processing(client_data,price_data):
     diff_data=jan_dec_diff(monthly_price)
     final_data=join_tables(diff_data,client_data,"id")
     price_avgs=aggregate_fun(price_data,["id"],{"price_off_peak_var":"mean","price_peak_var":"mean","price_mid_peak_var":"mean","price_off_peak_fix":"mean","price_peak_fix":"mean","price_mid_peak_fix":"mean"})
-    price_avgs=cycles(price_avgs,"price_off_peak_var","price_peak_var")
-    price_avgs=cycles(price_avgs,"price_peak_var","price_mid_peak_var")
-    price_avgs=cycles(price_avgs,"price_off_peak_var","price_mid_peak_var")
-    price_avgs=cycles(price_avgs,"price_off_peak_fix","price_peak_fix")
-    price_avgs=cycles(price_avgs,"price_peak_fix","price_mid_peak_fix")
-    price_avgs=cycles(price_avgs,"price_off_peak_fix","price_mid_peak_fix")
+    price_avgs=cycles(price_avgs,"price_off_peak_var","price_peak_var","mean")
+    price_avgs=cycles(price_avgs,"price_peak_var","price_mid_peak_var","mean")
+    price_avgs=cycles(price_avgs,"price_off_peak_var","price_mid_peak_var","mean")
+    price_avgs=cycles(price_avgs,"price_off_peak_fix","price_peak_fix","mean")
+    price_avgs=cycles(price_avgs,"price_peak_fix","price_mid_peak_fix","mean")
+    price_avgs=cycles(price_avgs,"price_off_peak_fix","price_mid_peak_fix","mean")
     final_data=join_tables(final_data,price_avgs,"id")
+    prices_agg_monthly=aggregate_fun(price_data,["id","price_date"],{"price_off_peak_var":"mean","price_peak_var":"mean","price_mid_peak_var":"mean","price_off_peak_fix":"mean","price_peak_fix":"mean","price_mid_peak_fix":"mean"})
+    prices_agg_monthly=cycles(prices_agg_monthly,"price_off_peak_var","price_peak_var","monthly_mean")
+    prices_agg_monthly=cycles(prices_agg_monthly,"price_peak_var","price_mid_peak_var","monthly_mean")
+    prices_agg_monthly=cycles(prices_agg_monthly,"price_off_peak_var","price_mid_peak_var","monthly_mean")
+    prices_agg_monthly=cycles(prices_agg_monthly,"price_off_peak_fix","price_peak_fix","monthly_mean")
+    prices_agg_monthly=cycles(prices_agg_monthly,"price_off_peak_fix","price_peak_fix","monthly_mean")
+    prices_agg_monthly=cycles(prices_agg_monthly,"price_off_peak_fix","price_mid_peak_fix","monthly_mean")
+    prices_agg_monthly.drop(columns=["price_date","price_off_peak_var","price_peak_var","price_mid_peak_var","price_off_peak_fix","price_peak_fix","price_mid_peak_fix"],inplace=True)
+    final_data=join_tables(final_data,prices_agg_monthly,"id")
+    final_data["Tenure"]=((final_data["date_end"]-final_data["date_activ"]).dt.days//365)
+
+    dummies = pd.get_dummies(final_data["channel_sales"], dtype=int)
+    rare_cats = rare_samples_checking(final_data, "channel_sales")
+    dummies = dummies[rare_cats]
+    final_data = pd.concat([final_data, dummies], axis=1)
+
+    dummies_origin = pd.get_dummies(final_data["origin_up"], prefix="origin_up", dtype=int)
+    rare_cats_origin = rare_samples_checking(final_data, "origin_up")
+    keep_cols = [f"origin_up_{c}" for c in rare_cats_origin]
+    dummies_origin = dummies_origin[keep_cols]
+    final_data=pd.concat([final_data,dummies_origin],axis=1)
+
+    final_data=final_data.drop(columns=["channel_sales","origin_up"])
+
+    print(final_data.info())
+
+
+
+
 
     return final_data
 
