@@ -84,10 +84,10 @@ def data_pre_processing(client_data,price_data):
     return final_data
 
 
-file_client_data="D:\\Projects\\Churn_prediction_model\\Data\\client_data.csv"
-file_price_data="D:\\Projects\\Churn_prediction_model\\Data\\price_data.csv"
-client_data=pd.read_csv(file_client_data)
-price_data=pd.read_csv(file_price_data)
-difference_data=data_pre_processing(client_data,price_data)
-print(difference_data)
+#file_client_data="D:\\Projects\\Churn_prediction_model\\Data\\client_data.csv"
+#file_price_data="D:\\Projects\\Churn_prediction_model\\Data\\price_data.csv"
+#client_data=pd.read_csv(file_client_data)
+#price_data=pd.read_csv(file_price_data)
+#difference_data=data_pre_processing(client_data,price_data)
+#print(difference_data)
 
