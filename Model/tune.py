@@ -19,6 +19,6 @@ def tune_model(X,Y):
         scores=cross_val_score(model,X,Y,cv=3,scoring="recall")
         return scores.mean()
     study=optuna.create_study(direction="maximize")
-    study.optimize(objective,n_trails=20)
+    study.optimize(objective,n_trials=20)
     print("Best Parameters:",study.best_params)
     return study.best_params
