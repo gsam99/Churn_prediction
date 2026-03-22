@@ -74,8 +74,8 @@ def data_pre_processing(client_data,price_data):
     final_data=pd.concat([final_data,dummies_origin],axis=1)
 
     final_data=final_data.drop(columns=["channel_sales","origin_up"])
-
-    print(final_data.info())
+    final_data=final_data.drop(columns=["date_activ","date_end","date_modif_prod","date_renewal"])
+    final_data.to_csv("D:\\Projects\\Churn_prediction_model\\Data\\final_data.csv",index=False)
 
 
 

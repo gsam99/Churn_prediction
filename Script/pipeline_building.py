@@ -14,6 +14,7 @@ from data_load.pre_processing import data_pre_processing
 from Model.train import train_model
 from Model.tune import tune_model
 from Model.evaluate import evaluate_model
+from pathlib import Path
 
 
 def main( ):
@@ -27,59 +28,80 @@ def main( ):
     parser.add_argument("--experiment", default="Churn_prediction")
     parser.add_argument("--mlflow_uri", default=None)
     args = parser.parse_args()
-    #---------------------ML configuration------------------------
-    ml_run_path = args.mlflow_uri or f"sqlite:///{project_root}/mlflow.db"
+
+    # --------------------- MLflow configuration ------------------------
+    from pathlib import Path
+    import json, joblib
+
+    project_root_path = Path(__file__).resolve().parents[1]
+    project_root = str(project_root_path)  # keep your existing os.path usage
+
+    ml_run_path = args.mlflow_uri or f"sqlite:///{project_root_path.as_posix()}/mlflow.db"
     mlflow.set_tracking_uri(ml_run_path)
     mlflow.set_experiment(args.experiment)
+
+    # --------------------- EVERYTHING inside the run -------------------
     with mlflow.start_run():
-        mlflow.log_param("model","Random Forest Classifier")
-        mlflow.log_param("threshold",args.threshold)
-        mlflow.log_param("test_size",args.test_size)
-    #-------------------data loading---------------------------
-    data_dir = os.path.join(project_root, "Data")
-    client_filename = os.path.join(data_dir, args.client_file)
-    price_filename = os.path.join(data_dir, args.price_file)
-    client_data = load_data(client_filename)
-    price_data = load_data(price_filename)
+        mlflow.log_param("model", "Random Forest Classifier")
+        mlflow.log_param("threshold", args.threshold)
+        mlflow.log_param("test_size", args.test_size)
 
-    #---------------------------pre-processing--------------------
-    df=data_pre_processing(client_data,price_data)
-    target=df["churn"]
+        # ------------------- data loading ---------------------------
+        data_dir = os.path.join(project_root, "Data")
+        client_filename = os.path.join(data_dir, args.client_file)
+        price_filename = os.path.join(data_dir, args.price_file)
 
-    #----------------------------Meta Data consistency-------------
-    import json,joblib
-    artifacts_dir=os.path.join(project_root,"artifacts")
-    os.makedirs(artifacts_dir,exist_ok=True)
+        client_data = load_data(client_filename)
+        price_data = load_data(price_filename)
 
-    X_features=list(df.drop(columns=["churn"]).columns)
-    with open(os.path.join(artifacts_dir,"X_features.json"),"w") as f:
-        json.dump(X_features,f)
-    mlflow.log_text("\n".join(X_features),artifact_file="X_features.txt")
-    preprocessing_artifact={"features columns":X_features,
-                            "target columns":target}
-    joblib.dump(preprocessing_artifact, os.path.join(artifacts_dir, "preprocessing.pkl"))
-    mlflow.log_artifact(os.path.join(artifacts_dir, "preprocessing.pkl"))
+        # ------------------- pre-processing -------------------------
+        df = data_pre_processing(client_data, price_data)
+        target = df["churn"]
 
-    #-------------------------------Train/Test Split-----------------
-    X=df.drop(columns=["churn"])
-    Y=df["churn"]
-    x_train,x_test,y_train,y_test=train_test_split(X,Y,test_size=args.test_size,random_state=42)
+        # ------------------- Meta Data consistency ------------------
+        artifacts_dir = os.path.join(project_root, "artifacts")
+        os.makedirs(artifacts_dir, exist_ok=True)
 
-    #-------------------------------Model Tuning----------------------
-    param=None
-    best_params=tune_model(x_train,y_train)
-    params={**best_params,"n_jobs":-1,"random_state":42}
-    for k, v in params.items():
-        mlflow.log_param(k,v)
+        # IMPORTANT: keep feature list consistent with what you actually train on
+        X_features = list(df.drop(columns=["churn", "id"]).columns)
 
-    #-------------------------------Train Model------------------------
-    model=train_model(x_train,x_test,y_train,y_test,args.threshold)
+        with open(os.path.join(artifacts_dir, "X_features.json"), "w") as f:
+            json.dump(X_features, f)
 
-    #-------------------------------Evaluation----------------------
-    evaluate_model(model,x_test,y_test)
-    model_path = os.path.join(artifacts_dir, "model.pkl")
-    joblib.dump(model, model_path)
-    mlflow.log_artifact(model_path)
+        mlflow.log_text("\n".join(X_features), artifact_file="X_features.txt")
+
+        preprocessing_artifact = {
+            "feature_columns": X_features,
+            "target_column": "churn",
+        }
+        joblib.dump(preprocessing_artifact, os.path.join(artifacts_dir, "preprocessing.pkl"))
+        mlflow.log_artifact(os.path.join(artifacts_dir, "preprocessing.pkl"))
+
+        # ------------------- Train/Test Split -----------------------
+        X = df.drop(columns=["churn", "id"])
+        Y = df["churn"]
+
+        x_train, x_test, y_train, y_test = train_test_split(
+            X, Y, test_size=args.test_size, random_state=42
+        )
+
+        # ------------------- Model Tuning ---------------------------
+        best_params = tune_model(x_train, y_train)
+
+        params = {**best_params, "n_jobs": -1, "random_state": 42}
+        for k, v in params.items():
+            mlflow.log_param(k, v)
+
+        # ------------------- Train Model ----------------------------
+        model = train_model(x_train, x_test, y_train, y_test, args.threshold, params=params)
+
+        # ------------------- Evaluation -----------------------------
+        evaluate_model(model, x_test, y_test)
+
+        # ------------------- Save Model Artifact --------------------
+        model_path = os.path.join(artifacts_dir, "model.pkl")
+        joblib.dump(model, model_path)
+        mlflow.log_artifact(model_path)
 
 
 
